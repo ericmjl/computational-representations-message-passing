@@ -1,0 +1,7 @@
+name: computational-representations-message-passing
+channels:
+- conda-forge
+dependencies:
+- python=3.7
+- imagemagick=7.0.8_68
+- pandoc=2.7.3
