@@ -44,7 +44,8 @@ In this case, carbon would be represented by the function `f(N) = (6, 4)`.
 
 Visually, one might represent it as follows:
 
-\<FIGURE\>
+<!-- \<FIGURE\> -->
+![](http://ubuntu-gpu.myddns.me:8034/figure-msg-passing-carbon-methane.png)
 
 ### Message Passing
 
@@ -445,3 +446,63 @@ who first pointed me to the linear algebra equivalents of graphs.
 
 I also thank David Duvenaud and Matthew J. Johnson
 for their pedagogy while they were at Harvard.
+
+## Appendix
+
+### Equivalence between padded and non-padded message passing.
+
+To readers who may need an example to be convinced
+that matrix multiplying the padded matrices
+is equivalent to matrix multiplying the originals,
+we show the Python example below. 
+
+Firstly, without padding:
+
+```python
+F = np.array([[1, 0], [1, 1]])
+A = np.array([[1, 0], [0, 1]])
+M = np.dot(A, F)
+
+# Value of M
+# DeviceArray([[1, 0],
+            #  [1, 1]], dtype=int32)
+```
+
+And now, with padding:
+
+```python
+pad_size = 2
+F_pad = np.pad(
+    F, 
+    pad_width=[
+        (0, pad_size),
+        (0, 0),
+    ]
+)
+A_pad = np.pad(
+    A,
+    pad_width=[
+        (0, pad_size),
+        (0, pad_size),
+    ]
+)
+
+# F_pad:
+# DeviceArray([[1, 0],
+#              [1, 1],
+#              [0, 0],
+#              [0, 0]], dtype=int32)
+
+# A_pad:
+# DeviceArray([[1, 0, 0, 0],
+#              [0, 1, 0, 0],
+#              [0, 0, 0, 0],
+#              [0, 0, 0, 0]], dtype=int32)
+
+M_pad = np.dot(A_pad, F_pad)
+# M_pad:
+# DeviceArray([[1, 0],
+#              [1, 1],
+#              [0, 0],
+#              [0, 0]], dtype=int32)
+```
