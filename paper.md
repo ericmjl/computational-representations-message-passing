@@ -45,7 +45,7 @@ In this case, carbon would be represented by the function `f(N) = (6, 4)`.
 Visually, one might represent it as follows:
 
 <!-- \<FIGURE\> -->
-![](http://ubuntu-gpu.myddns.me:8034/figure-msg-passing-carbon-methane.png)
+![](./figures/figure-msg-passing-carbon-methane.png)
 
 ### Message Passing
 
@@ -61,15 +61,9 @@ one may define a message passing operation
 to be the summation the function evaluated at a node
 with the function evaluated on its neighbor’s nodes.
 Here is a simplistic example,
-shown using a scalar on two nodes:
+shown using a scalar on water:
 
-\<FIGURE GOES HERE\>
-
-To reinforce the point,
-here is a slightly more complex example
-using a 3-slot vector on a 5-node graph.
-
-\<FIGURE GOES HERE\>
+![](./figures/figure-msg-passing-water.png)
 
 Summation is not the only message passing operation that can be defined.
 In principle,
@@ -240,7 +234,7 @@ If we order the nodes in our adjacency matrix and feature matrix correctly,
 we will end up with a block diagonal adjacency matrix,
 and vertically stacked feature matrices.
 
-\<FIGURE GOES HERE\>
+![](./figures/figure-message-passing-sparse.png)
 
 If we prepare the multiple graphs as a large disconnected graph,
 then we will have a dense feature matrix of shape `(sum(n_nodes), n_feats)`,
@@ -271,7 +265,7 @@ of graphs of the same size together,
 and perform a batched matrix multiplication,
 ensuring that we preserve the sample/batch dimension in the final result.
 
-\<FIGURE GOES HERE\>
+![](./figures/figure-message-passing-graph-size.png)
 
 In terms of Python code, this requires special preparation of the graphs.
 
@@ -385,10 +379,16 @@ def message_passing(A, F):
     return batch_matmul(A, F)
 ```
 
+Visually, this is represented as follows:
+
+![](./figures/figure-message-passing-batched.png)
+
 To this author’s best knowledge,
 this should be the most efficient implementation of batched message passing
 across multiple graphs
-that also supports automatic differentiation.
+that also supports automatic differentiation,
+while also maintaining parity with the written equation form,
+hence preserving readability.
 The problems associated with a for-loop,
 sparse matrix multiplication,
 and dictionary carries,
@@ -436,7 +436,7 @@ archived on Zenodo.
 
 ## Acknowledgments
 
-I thank Rif. A. Saurous (#check)
+I thank Rif. A. Saurous
 for our discussion at the PyMC4 developer summit in Montreal, QC,
 where his laser-like focus on “tensorify everything”
 inspired many new thoughts in my mind.
@@ -454,7 +454,7 @@ for their pedagogy while they were at Harvard.
 To readers who may need an example to be convinced
 that matrix multiplying the padded matrices
 is equivalent to matrix multiplying the originals,
-we show the Python example below. 
+we show the Python example below.
 
 Firstly, without padding:
 
@@ -473,7 +473,7 @@ And now, with padding:
 ```python
 pad_size = 2
 F_pad = np.pad(
-    F, 
+    F,
     pad_width=[
         (0, pad_size),
         (0, 0),
