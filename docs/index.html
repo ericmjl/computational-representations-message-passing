@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Eric J. Ma" />
+  <title>Computational Representations of Message Passing</title>
+  <style>
+      code{white-space: pre-wrap;}
+      span.smallcaps{font-variant: small-caps;}
+      span.underline{text-decoration: underline;}
+      div.column{display: inline-block; vertical-align: top; width: 50%;}
+  </style>
+  <style>
+code.sourceCode > span { display: inline-block; line-height: 1.25; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+code.sourceCode { white-space: pre-wrap; }
+code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="styles.css" />
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Computational Representations of Message Passing</h1>
+<p class="author">Eric J. Ma</p>
+</header>
+<p><strong>Abstract:</strong> Message passing on graphs, also known as graph convolutions, have become a popular research topic. In this piece, I aim to provide a short technical primer on ways to implement message passing on graphs. The goal is to provide clear pedagogy on what message passing means mathematically, and hopefully point towards cleaner computational implementations of the key algorithmic pieces.</p>
+<p><strong>Assumed knowledge:</strong> We assume our reader has familiarity with elementary graph concepts. More specifically, the terms “graph”, “nodes”, and “edges” should be familiar terms. Code examples in this technical piece will be written using the Python programming language, specifically using Python 3.7, NumPy 1.17 (in JAX), and NetworkX 2.2.</p>
+<h2 id="introduction-to-message-passing">Introduction to Message Passing</h2>
+<h3 id="functions-on-nodes">Functions on Nodes</h3>
+<p>Message passing starts with a “function defined over nodes”, which we will denote here as <code>f(N)</code> (for “function of node N”). What is this, one might ask? In short, this is nothing more than a numeric value of some kind attached to every node in a graph. This value could be scalar, vector, matrix, or tensor.</p>
+<p>The semantic meaning of that value is typically defined by the application domain that the graph is being used in. As a concrete example, in molecules, a “function” defined over the molecular graph could be the scalar-valued proton number. Carbon would be represented by the function <code>f(N) = 6</code>. Alternatively, it could be a vector of values encompassing both the atomic mass and the number of valence electrons. In this case, carbon would be represented by the function <code>f(N) = (6, 4)</code>.</p>
+<p>Visually, one might represent it as follows:</p>
+<!-- \<FIGURE\> -->
+<p><img src="./figures/figure-msg-passing-carbon-methane.png" /></p>
+<h3 id="message-passing">Message Passing</h3>
+<p>What then is message passing, or, as the deep learning community has adopted, “graph convolution”? At its core, message passing is nothing more than a generic mathematical operation defined between a node’s function value and its neighbors function value.</p>
+<p>As an example, one may define a message passing operation to be the summation the function evaluated at a node with the function evaluated on its neighbor’s nodes. Here is a simplistic example, shown using a scalar on water:</p>
+<p><img src="./figures/figure-msg-passing-water.png" /></p>
+<p>Summation is not the only message passing operation that can be defined. In principle, given any node <code>N</code> and its neighbors <code>neighbors(N)</code> values, we may write down a generic function <code>f(N, neighbors(N))</code> that defines how the function value on each node is to be shared with its neighbors.</p>
+<h2 id="computational-implementations-of-message-passing">Computational Implementations of Message Passing</h2>
+<p>For simplicity, let us stay with the particular case where the message passing operation is defined as the summation of one’s neighbors values with one’s values.</p>
+<h3 id="object-oriented-implementation">Object-Oriented Implementation</h3>
+<p>With this definition in place, we may then define a message passing operation in Python as follows:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1"></a><span class="kw">def</span> message_passing(G):</span>
+<span id="cb1-2"><a href="#cb1-2"></a>    <span class="co">&quot;&quot;&quot;Object-oriented message passing operation.&quot;&quot;&quot;</span></span>
+<span id="cb1-3"><a href="#cb1-3"></a></span>
+<span id="cb1-4"><a href="#cb1-4"></a>    G_new <span class="op">=</span> G.copy()</span>
+<span id="cb1-5"><a href="#cb1-5"></a></span>
+<span id="cb1-6"><a href="#cb1-6"></a>    <span class="cf">for</span> node, data <span class="kw">in</span> G.nodes(data<span class="op">=</span><span class="va">True</span>):</span>
+<span id="cb1-7"><a href="#cb1-7"></a>        new_value <span class="op">=</span> data[<span class="st">&quot;value&quot;</span>]  <span class="co"># assuming the value is stored under this key</span></span>
+<span id="cb1-8"><a href="#cb1-8"></a>        neighbors <span class="op">=</span> G.neighbors(node)</span>
+<span id="cb1-9"><a href="#cb1-9"></a>        <span class="cf">for</span> neighbor <span class="kw">in</span> neighbors:</span>
+<span id="cb1-10"><a href="#cb1-10"></a>            new_value <span class="op">+=</span> G.nodes[neighbor][<span class="st">&quot;value&quot;</span>]</span>
+<span id="cb1-11"><a href="#cb1-11"></a>        G_new.node[node][<span class="st">&quot;value&quot;</span>] <span class="op">=</span> new_value</span>
+<span id="cb1-12"><a href="#cb1-12"></a>    <span class="cf">return</span> G</span></code></pre></div>
+<p>Thinking about computational considerations, we would naturally consider this implementation to be slow, because it involves a for-loop over Python objects. If we had multiple graphs over which we wanted message passing to be performed, the type-checking overhead in Python will naturally accumulate, and may even dominate.</p>
+<h3 id="linear-algebra-implementation">Linear Algebra Implementation</h3>
+<p>How might we speed things up? As it turns out, linear algebra may be useful.</p>
+<p>We know that every graph may be represented as an adjacency matrix <code>A</code>, whose shape is <code>(n_nodes, n_nodes)</code>. As long as we maintain proper node ordering, we may also define a compatibly-shaped matrix <code>F</code> for node values, whose shape is <code>(n_nodes, n_features)</code>.</p>
+<p>Taking advantage of this, in order define the “self plus neighbors” message passing operation in terms of linear algebra operations, we may then modify <code>A</code> by adding to it a diagonal matrix of ones. (In graph terminology, this is equivalent to adding a self-loop to the adjacency matrix.)</p>
+<p>Then, message passing, as defined above, is trivially the dot product of <code>A</code> and <code>F</code>:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1"></a><span class="kw">def</span> message_passing(A, F):</span>
+<span id="cb2-2"><a href="#cb2-2"></a>    <span class="co">&quot;&quot;&quot;</span></span>
+<span id="cb2-3"><a href="#cb2-3"></a><span class="co">    Message passing done by linear algebra.</span></span>
+<span id="cb2-4"><a href="#cb2-4"></a></span>
+<span id="cb2-5"><a href="#cb2-5"></a><span class="co">    :param A: Adjacency-like matrix, whose shape is (n_nodes, n_nodes).</span></span>
+<span id="cb2-6"><a href="#cb2-6"></a><span class="co">    :param F: Feature matrix, whose shape is (n_nodes, n_features).</span></span>
+<span id="cb2-7"><a href="#cb2-7"></a><span class="co">    &quot;&quot;&quot;</span></span>
+<span id="cb2-8"><a href="#cb2-8"></a></span>
+<span id="cb2-9"><a href="#cb2-9"></a>    <span class="cf">return</span> np.dot(A, F)</span></code></pre></div>
+<p>In principle, variants on the adjacency matrix are possible. The only hard requirement for the matrix <code>A</code> is that it has the shape <code>(n_nodes, n_nodes)</code>.</p>
+<h4 id="adjacency-variant-1-n-degree-adjacency-matrix">Adjacency Variant 1: N-degree adjacency matrix</h4>
+<p>The adjacency matrix represents connectivity by degree 1. If we take the second matrix power of the adjacency matrix, we get back the connectivity of nodes at two degrees of separation away. More generically:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">def</span> n_degree_adjacency(A, n: <span class="bu">int</span>):</span>
+<span id="cb3-2"><a href="#cb3-2"></a>    <span class="co">&quot;&quot;&quot;</span></span>
+<span id="cb3-3"><a href="#cb3-3"></a><span class="co">    Return the n-degree of separation adjacency matrix.</span></span>
+<span id="cb3-4"><a href="#cb3-4"></a></span>
+<span id="cb3-5"><a href="#cb3-5"></a><span class="co">    :param A: Adjacency matrix, of shape (n_nodes, n_nodes)</span></span>
+<span id="cb3-6"><a href="#cb3-6"></a><span class="co">    :param n: Number of degrees of separation.</span></span>
+<span id="cb3-7"><a href="#cb3-7"></a><span class="co">    &quot;&quot;&quot;</span></span>
+<span id="cb3-8"><a href="#cb3-8"></a>    <span class="cf">return</span> np.linalg.matrix_power(A, n)</span></code></pre></div>
+<p>Performing message passing using the N-degree adjacency matrix effectively describes sharing of information between nodes that are N-degrees of separation apart, skipping intermediate neighbors.</p>
+<h4 id="adjacency-variant-2-graph-laplacian-matrix">Adjacency Variant 2: Graph laplacian matrix</h4>
+<p>The graph laplacian matrix is defined as the diagonal degree matrix <code>D</code> (where the diagonal entries are the degree of each node) minus the adjacency matrix <code>A</code>: <code>L = D - A</code>.</p>
+<p>This matrix is the discrete analog to the Laplacian operator, and can give us information about the discrete gradient between a node and its neighbors.</p>
+<h2 id="message-passing-on-multiple-graphs">Message Passing on Multiple Graphs</h2>
+<p>Thus far, we have seen an efficient implementation of message passing on a single graph using linear algebra.</p>
+<p>How would one perform message passing on multiple graphs, though?</p>
+<p>This is a question that has applications in graph neural networks (especially in cheminformatics). For the learning task where one has a batch of graphs, and the supervised learning task is to predict a scalar (or vector) value per graph, knowing how to efficiently message pass over multiple graphs is crucial to developing a performant graph neural network model.</p>
+<p>The challenge here, though, is that graphs generally are of variable size, hence it is not immediately obvious how to “tensorify” the operations.</p>
+<p>Let us look at a few alternatives, starting with the most obvious (but also most inefficient), building towards more efficient solutions.</p>
+<h3 id="implementation-1-for-loops-over-pairs-of-adjacency-and-feature-matrices">Implementation 1: For-loops over pairs of adjacency and feature matrices</h3>
+<p>If we multiple graphs, they may be represented as a list of feature matrices and a list of adjacency matrices. The message passing operation, then, may be defined by writing a for-loop over pairs of these matrices.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw">def</span> message_passing(As, Fs):</span>
+<span id="cb4-2"><a href="#cb4-2"></a>    outputs <span class="op">=</span> []</span>
+<span id="cb4-3"><a href="#cb4-3"></a>    <span class="cf">for</span> A, F <span class="kw">in</span> <span class="bu">zip</span>(As, Fs):</span>
+<span id="cb4-4"><a href="#cb4-4"></a>        outputs.append(np.dot(A, F))</span>
+<span id="cb4-5"><a href="#cb4-5"></a>    <span class="cf">return</span> outputs</span></code></pre></div>
+<p>Because of the for-loop, the obvious downside here is the overhead induced by running a for-loop over pairs of As and Fs.</p>
+<h3 id="implementation-2-sparse-matrices">Implementation 2: Sparse Matrices</h3>
+<p>Sparse matrices are an attractive alternative. Instead of treating graphs as independent samples, we may treat them as a single large graph on which we perform message passing. If we order the nodes in our adjacency matrix and feature matrix correctly, we will end up with a block diagonal adjacency matrix, and vertically stacked feature matrices.</p>
+<p><img src="./figures/figure-message-passing-sparse.png" /></p>
+<p>If we prepare the multiple graphs as a large disconnected graph, then we will have a dense feature matrix of shape <code>(sum(n_nodes), n_feats)</code>, and a sparse adjacency matrix of shape <code>(sum(n_nodes), sum(n_nodes))</code>. Message passing then becomes a sparse-dense dot product:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1"></a><span class="kw">def</span> message_passing(A, F):</span>
+<span id="cb5-2"><a href="#cb5-2"></a>    <span class="cf">return</span> sparse.dot(A, F)</span></code></pre></div>
+<p>The upside here is that message passing has been returned back to its natural form (a dot product). The downsides here are that the data must be prepared as a single large graph, hence we effectively lose what one would call the “sample” (or “batch”) dimension. Additionally, the most widely used deep learning libraries do not support automatic differentiation on sparse-dense or dense-sparse dot products, hence limiting the use of this implementation in deep learning.</p>
+<h3 id="implementation-3-size-batched-matrix-multiplication">Implementation 3: Size-batched matrix multiplication</h3>
+<p>An alternative way to conceptualize message passing is to think of graphs of the same size as belonging to a “size batch”. We may then vertically stack the feature and adjacency matrices of graphs of the same size together, and perform a batched matrix multiplication, ensuring that we preserve the sample/batch dimension in the final result.</p>
+<p><img src="./figures/figure-message-passing-graph-size.png" /></p>
+<p>In terms of Python code, this requires special preparation of the graphs.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1"></a><span class="im">from</span> collections <span class="im">import</span> defaultdict</span>
+<span id="cb6-2"><a href="#cb6-2"></a><span class="im">from</span> jax.lax <span class="im">import</span> batch_matmul</span>
+<span id="cb6-3"><a href="#cb6-3"></a></span>
+<span id="cb6-4"><a href="#cb6-4"></a><span class="kw">def</span> feature_matrix(G):</span>
+<span id="cb6-5"><a href="#cb6-5"></a>    <span class="co"># ...</span></span>
+<span id="cb6-6"><a href="#cb6-6"></a>    <span class="cf">return</span> F</span>
+<span id="cb6-7"><a href="#cb6-7"></a></span>
+<span id="cb6-8"><a href="#cb6-8"></a><span class="kw">def</span> prep_data(Gs: <span class="bu">list</span>):</span>
+<span id="cb6-9"><a href="#cb6-9"></a>    adjacency_matrices <span class="op">=</span> defaultdict(<span class="bu">list</span>)</span>
+<span id="cb6-10"><a href="#cb6-10"></a>    feature_matrices <span class="op">=</span> defaultdict(<span class="bu">list</span>)</span>
+<span id="cb6-11"><a href="#cb6-11"></a>    <span class="cf">for</span> G <span class="kw">in</span> Gs:</span>
+<span id="cb6-12"><a href="#cb6-12"></a>        size <span class="op">=</span> <span class="bu">len</span>(G)</span>
+<span id="cb6-13"><a href="#cb6-13"></a>        F <span class="op">=</span> feature_matrix(G)</span>
+<span id="cb6-14"><a href="#cb6-14"></a>        A <span class="op">=</span> nx.adjacency_matrix(G) <span class="op">+</span> np.ones(size)</span>
+<span id="cb6-15"><a href="#cb6-15"></a>        adjacency_matrices[size].append(A)</span>
+<span id="cb6-16"><a href="#cb6-16"></a>        feature_matrices[size].append(A)</span>
+<span id="cb6-17"><a href="#cb6-17"></a></span>
+<span id="cb6-18"><a href="#cb6-18"></a>    <span class="cf">for</span> size, As <span class="kw">in</span> adjacency_matrices.items():</span>
+<span id="cb6-19"><a href="#cb6-19"></a>        adjacency_matrices[size] <span class="op">=</span> np.stack(As)</span>
+<span id="cb6-20"><a href="#cb6-20"></a>    <span class="cf">for</span> size, Fs <span class="kw">in</span> feature_matrices.items():</span>
+<span id="cb6-21"><a href="#cb6-21"></a>        feature_matrices[size] <span class="op">=</span> np.stack(Fs)</span>
+<span id="cb6-22"><a href="#cb6-22"></a>    <span class="cf">return</span> adjacency_matrices, feature_matrices</span>
+<span id="cb6-23"><a href="#cb6-23"></a></span>
+<span id="cb6-24"><a href="#cb6-24"></a></span>
+<span id="cb6-25"><a href="#cb6-25"></a><span class="kw">def</span> message_passing(As, Fs):</span>
+<span id="cb6-26"><a href="#cb6-26"></a>    result <span class="op">=</span> <span class="bu">dict</span>()</span>
+<span id="cb6-27"><a href="#cb6-27"></a>    <span class="cf">for</span> size <span class="kw">in</span> As.keys():</span>
+<span id="cb6-28"><a href="#cb6-28"></a>        F <span class="op">=</span> Fs[size]</span>
+<span id="cb6-29"><a href="#cb6-29"></a>        A <span class="op">=</span> As[size]</span>
+<span id="cb6-30"><a href="#cb6-30"></a></span>
+<span id="cb6-31"><a href="#cb6-31"></a>        result[size] <span class="op">=</span> batch_matmul(A, F)</span>
+<span id="cb6-32"><a href="#cb6-32"></a>    <span class="cf">return</span> result</span></code></pre></div>
+<p>In this implementation, we use <code>jax.lax.batch_matmul</code>, which inherently assumes that the first dimension is the sample/batch dimension, and that the matrix multiplication happens on the subsequent dimensions.</p>
+<p>An advantage here is that the number of loop overhead calls in Python is reduced to the number of unique graph sizes that are present in the graph. The disadvantage, though, is that we have a dictionary data structure that we have to deal with, which makes data handling in Python less natural when dealing with linear algebra libraries.</p>
+<h3 id="implementation-4-batched-padded-matrix-multiplication">Implementation 4: Batched padded matrix multiplication</h3>
+<p>In this implementation, we prepare the data in a different way. Firstly, we must know the size of the largest graph ahead-of-time.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1"></a>size <span class="op">=</span> ...  <span class="co"># largest graph size</span></span></code></pre></div>
+<p>We then pad every graph’s feature matrix with zeros along the node axis until the node axis is as long as the largest graph size.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1"></a><span class="kw">def</span> prep_feats(F, size):</span>
+<span id="cb8-2"><a href="#cb8-2"></a>    <span class="co"># F is of shape (n_nodes, n_feats)</span></span>
+<span id="cb8-3"><a href="#cb8-3"></a>    <span class="cf">return</span> np.pad(</span>
+<span id="cb8-4"><a href="#cb8-4"></a>        F,</span>
+<span id="cb8-5"><a href="#cb8-5"></a>        [</span>
+<span id="cb8-6"><a href="#cb8-6"></a>            (<span class="dv">0</span>, size <span class="op">-</span> F.shape[<span class="dv">0</span>]),</span>
+<span id="cb8-7"><a href="#cb8-7"></a>            (<span class="dv">0</span>, <span class="dv">0</span>)</span>
+<span id="cb8-8"><a href="#cb8-8"></a>        ],</span>
+<span id="cb8-9"><a href="#cb8-9"></a>    )</span></code></pre></div>
+<p>We do the same with every adjacency matrix.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1"></a><span class="kw">def</span> prep_adjs(A, size):</span>
+<span id="cb9-2"><a href="#cb9-2"></a>    <span class="co"># A is of shape (n_nodes, n_nodes)</span></span>
+<span id="cb9-3"><a href="#cb9-3"></a>    <span class="cf">return</span> np.pad(</span>
+<span id="cb9-4"><a href="#cb9-4"></a>        A,</span>
+<span id="cb9-5"><a href="#cb9-5"></a>        [</span>
+<span id="cb9-6"><a href="#cb9-6"></a>            (<span class="dv">0</span>, size<span class="op">-</span>A.shape[<span class="dv">0</span>]),</span>
+<span id="cb9-7"><a href="#cb9-7"></a>            (<span class="dv">0</span>, size<span class="op">-</span>A.shape[<span class="dv">0</span>]),</span>
+<span id="cb9-8"><a href="#cb9-8"></a>        ],</span>
+<span id="cb9-9"><a href="#cb9-9"></a>    )</span></code></pre></div>
+<p>Finally, we simply stack them into the data matrix:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1"></a>As <span class="op">=</span> np.stack([prep_adjs(A, size) <span class="cf">for</span> A <span class="kw">in</span> As]</span>
+<span id="cb10-2"><a href="#cb10-2"></a>Fs <span class="op">=</span> np.stack([prep_feats(F, size) <span class="cf">for</span> F <span class="kw">in</span> Fs]</span></code></pre></div>
+<p>Now, the shapes of our matrices are as follows:</p>
+<ul>
+<li><code>F</code> takes on the shape <code>(n_graphs, n_nodes, n_feats)</code></li>
+<li><code>A</code> takes on the shape <code>(n_graphs, n_nodes, n_nodes)</code></li>
+</ul>
+<p>If we desire to be semantically consistent with our shapes, then we might, by convention, assign the first dimension to be the sample/batch dimension.</p>
+<p>Finally, message passing is now trivially defined as a batch matrix multiply:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1"></a><span class="kw">def</span> message_passing(A, F):</span>
+<span id="cb11-2"><a href="#cb11-2"></a>    <span class="cf">return</span> batch_matmul(A, F)</span></code></pre></div>
+<p>Visually, this is represented as follows:</p>
+<p><img src="./figures/figure-message-passing-batched.png" /></p>
+<p>To this author’s best knowledge, this should be the most efficient implementation of batched message passing across multiple graphs that also supports automatic differentiation, while also maintaining parity with the written equation form, hence preserving readability. The problems associated with a for-loop, sparse matrix multiplication, and dictionary carries, are removed. Moreover, the sample/batch dimension is preserved, hence it is semantically easy to map each graph to its corresponding output value. Given the current state of automatic differentiation libraries, no additional machinery is necessary to support sparse matrix products.</p>
+<p>The only disadvantage that this author can think of is that zero-padding may not be intuitive at first glance, and that the data must still be specially prepared and stacked first.</p>
+<h2 id="concluding-words">Concluding Words</h2>
+<p>This essay was initially motivated by the myriad of difficult-to-read message passing implementations present in the deep learning literature. Frequently, a for-loop of some kind is invoked, or an undocumented list data structure is created, in order to accomplish the message passing operation. Moreover, the model implementation is frequently not separated from the data preparation step, which makes for convoluted and mutually incompatible implementations of message passing in neural networks.</p>
+<p>It is my hope that while the research field is still in vogue, a technical piece that advises researchers on easily-readable and efficient implementations of message passing on graphs may help advance research practice. In particular, if our code can more closely match the equations listed in papers, that will help facilitate communication and verification of model implementations.</p>
+<p>To help researchers get started, an example implementation for the full data preparation and batched padded matrix multiplies in JAX is available on GitHub, archived on Zenodo.</p>
+<h2 id="acknowledgments">Acknowledgments</h2>
+<p>I thank Rif. A. Saurous for our discussion at the PyMC4 developer summit in Montreal, QC, where his laser-like focus on “tensorify everything” inspired many new thoughts in my mind.</p>
+<p>Many thanks to my wife, Nan Li, who first pointed me to the linear algebra equivalents of graphs.</p>
+<p>I also thank David Duvenaud and Matthew J. Johnson for their pedagogy while they were at Harvard.</p>
+<h2 id="appendix">Appendix</h2>
+<h3 id="equivalence-between-padded-and-non-padded-message-passing.">Equivalence between padded and non-padded message passing.</h3>
+<p>To readers who may need an example to be convinced that matrix multiplying the padded matrices is equivalent to matrix multiplying the originals, we show the Python example below.</p>
+<p>Firstly, without padding:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1"></a>F <span class="op">=</span> np.array([[<span class="dv">1</span>, <span class="dv">0</span>], [<span class="dv">1</span>, <span class="dv">1</span>]])</span>
+<span id="cb12-2"><a href="#cb12-2"></a>A <span class="op">=</span> np.array([[<span class="dv">1</span>, <span class="dv">0</span>], [<span class="dv">0</span>, <span class="dv">1</span>]])</span>
+<span id="cb12-3"><a href="#cb12-3"></a>M <span class="op">=</span> np.dot(A, F)</span>
+<span id="cb12-4"><a href="#cb12-4"></a></span>
+<span id="cb12-5"><a href="#cb12-5"></a><span class="co"># Value of M</span></span>
+<span id="cb12-6"><a href="#cb12-6"></a><span class="co"># DeviceArray([[1, 0],</span></span>
+<span id="cb12-7"><a href="#cb12-7"></a>            <span class="co">#  [1, 1]], dtype=int32)</span></span></code></pre></div>
+<p>And now, with padding:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1"></a>pad_size <span class="op">=</span> <span class="dv">2</span></span>
+<span id="cb13-2"><a href="#cb13-2"></a>F_pad <span class="op">=</span> np.pad(</span>
+<span id="cb13-3"><a href="#cb13-3"></a>    F,</span>
+<span id="cb13-4"><a href="#cb13-4"></a>    pad_width<span class="op">=</span>[</span>
+<span id="cb13-5"><a href="#cb13-5"></a>        (<span class="dv">0</span>, pad_size),</span>
+<span id="cb13-6"><a href="#cb13-6"></a>        (<span class="dv">0</span>, <span class="dv">0</span>),</span>
+<span id="cb13-7"><a href="#cb13-7"></a>    ]</span>
+<span id="cb13-8"><a href="#cb13-8"></a>)</span>
+<span id="cb13-9"><a href="#cb13-9"></a>A_pad <span class="op">=</span> np.pad(</span>
+<span id="cb13-10"><a href="#cb13-10"></a>    A,</span>
+<span id="cb13-11"><a href="#cb13-11"></a>    pad_width<span class="op">=</span>[</span>
+<span id="cb13-12"><a href="#cb13-12"></a>        (<span class="dv">0</span>, pad_size),</span>
+<span id="cb13-13"><a href="#cb13-13"></a>        (<span class="dv">0</span>, pad_size),</span>
+<span id="cb13-14"><a href="#cb13-14"></a>    ]</span>
+<span id="cb13-15"><a href="#cb13-15"></a>)</span>
+<span id="cb13-16"><a href="#cb13-16"></a></span>
+<span id="cb13-17"><a href="#cb13-17"></a><span class="co"># F_pad:</span></span>
+<span id="cb13-18"><a href="#cb13-18"></a><span class="co"># DeviceArray([[1, 0],</span></span>
+<span id="cb13-19"><a href="#cb13-19"></a><span class="co">#              [1, 1],</span></span>
+<span id="cb13-20"><a href="#cb13-20"></a><span class="co">#              [0, 0],</span></span>
+<span id="cb13-21"><a href="#cb13-21"></a><span class="co">#              [0, 0]], dtype=int32)</span></span>
+<span id="cb13-22"><a href="#cb13-22"></a></span>
+<span id="cb13-23"><a href="#cb13-23"></a><span class="co"># A_pad:</span></span>
+<span id="cb13-24"><a href="#cb13-24"></a><span class="co"># DeviceArray([[1, 0, 0, 0],</span></span>
+<span id="cb13-25"><a href="#cb13-25"></a><span class="co">#              [0, 1, 0, 0],</span></span>
+<span id="cb13-26"><a href="#cb13-26"></a><span class="co">#              [0, 0, 0, 0],</span></span>
+<span id="cb13-27"><a href="#cb13-27"></a><span class="co">#              [0, 0, 0, 0]], dtype=int32)</span></span>
+<span id="cb13-28"><a href="#cb13-28"></a></span>
+<span id="cb13-29"><a href="#cb13-29"></a>M_pad <span class="op">=</span> np.dot(A_pad, F_pad)</span>
+<span id="cb13-30"><a href="#cb13-30"></a><span class="co"># M_pad:</span></span>
+<span id="cb13-31"><a href="#cb13-31"></a><span class="co"># DeviceArray([[1, 0],</span></span>
+<span id="cb13-32"><a href="#cb13-32"></a><span class="co">#              [1, 1],</span></span>
+<span id="cb13-33"><a href="#cb13-33"></a><span class="co">#              [0, 0],</span></span>
+<span id="cb13-34"><a href="#cb13-34"></a><span class="co">#              [0, 0]], dtype=int32)</span></span></code></pre></div>
+</body>
+</html>
