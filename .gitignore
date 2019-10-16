@@ -106,3 +106,4 @@ venv.bak/
 # Custom
 *.png
 figures/*.png
+!docs/figures/*.png
