@@ -20,3 +20,8 @@ steps:
     source activate computational-representations-message-passing
     make convert
   displayName: Build figures
+
+- bash: |
+    source activate computational-representations-message-passing
+    make paper
+  displayName: Build paper

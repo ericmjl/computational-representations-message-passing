@@ -1,4 +1,7 @@
-# Computational Representations of Message Passing
+---
+title: Computational Representations of Message Passing
+author: Eric J. Ma
+---
 
 **Abstract:** Message passing on graphs,
 also known as graph convolutions,
