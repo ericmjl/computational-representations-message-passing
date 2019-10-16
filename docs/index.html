@@ -95,11 +95,11 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>The semantic meaning of that value is typically defined by the application domain that the graph is being used in. As a concrete example, in molecules, a “function” defined over the molecular graph could be the scalar-valued proton number. Carbon would be represented by the function <code>f(N) = 6</code>. Alternatively, it could be a vector of values encompassing both the atomic mass and the number of valence electrons. In this case, carbon would be represented by the function <code>f(N) = (6, 4)</code>.</p>
 <p>Visually, one might represent it as follows:</p>
 <!-- \<FIGURE\> -->
-<p><img src="./figures/figure-msg-passing-carbon-methane.png" /></p>
+<p><img src="figures/figure-msg-passing-carbon-methane.png" /></p>
 <h3 id="message-passing">Message Passing</h3>
 <p>What then is message passing, or, as the deep learning community has adopted, “graph convolution”? At its core, message passing is nothing more than a generic mathematical operation defined between a node’s function value and its neighbors function value.</p>
 <p>As an example, one may define a message passing operation to be the summation the function evaluated at a node with the function evaluated on its neighbor’s nodes. Here is a simplistic example, shown using a scalar on water:</p>
-<p><img src="./figures/figure-msg-passing-water.png" /></p>
+<p><img src="figures/figure-msg-passing-water.png" /></p>
 <p>Summation is not the only message passing operation that can be defined. In principle, given any node <code>N</code> and its neighbors <code>neighbors(N)</code> values, we may write down a generic function <code>f(N, neighbors(N))</code> that defines how the function value on each node is to be shared with its neighbors.</p>
 <h2 id="computational-implementations-of-message-passing">Computational Implementations of Message Passing</h2>
 <p>For simplicity, let us stay with the particular case where the message passing operation is defined as the summation of one’s neighbors values with one’s values.</p>
@@ -163,14 +163,14 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>Because of the for-loop, the obvious downside here is the overhead induced by running a for-loop over pairs of As and Fs.</p>
 <h3 id="implementation-2-sparse-matrices">Implementation 2: Sparse Matrices</h3>
 <p>Sparse matrices are an attractive alternative. Instead of treating graphs as independent samples, we may treat them as a single large graph on which we perform message passing. If we order the nodes in our adjacency matrix and feature matrix correctly, we will end up with a block diagonal adjacency matrix, and vertically stacked feature matrices.</p>
-<p><img src="./figures/figure-message-passing-sparse.png" /></p>
+<p><img src="figures/figure-message-passing-sparse.png" /></p>
 <p>If we prepare the multiple graphs as a large disconnected graph, then we will have a dense feature matrix of shape <code>(sum(n_nodes), n_feats)</code>, and a sparse adjacency matrix of shape <code>(sum(n_nodes), sum(n_nodes))</code>. Message passing then becomes a sparse-dense dot product:</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1"></a><span class="kw">def</span> message_passing(A, F):</span>
 <span id="cb5-2"><a href="#cb5-2"></a>    <span class="cf">return</span> sparse.dot(A, F)</span></code></pre></div>
 <p>The upside here is that message passing has been returned back to its natural form (a dot product). The downsides here are that the data must be prepared as a single large graph, hence we effectively lose what one would call the “sample” (or “batch”) dimension. Additionally, the most widely used deep learning libraries do not support automatic differentiation on sparse-dense or dense-sparse dot products, hence limiting the use of this implementation in deep learning.</p>
 <h3 id="implementation-3-size-batched-matrix-multiplication">Implementation 3: Size-batched matrix multiplication</h3>
 <p>An alternative way to conceptualize message passing is to think of graphs of the same size as belonging to a “size batch”. We may then vertically stack the feature and adjacency matrices of graphs of the same size together, and perform a batched matrix multiplication, ensuring that we preserve the sample/batch dimension in the final result.</p>
-<p><img src="./figures/figure-message-passing-graph-size.png" /></p>
+<p><img src="figures/figure-message-passing-graph-size.png" /></p>
 <p>In terms of Python code, this requires special preparation of the graphs.</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1"></a><span class="im">from</span> collections <span class="im">import</span> defaultdict</span>
 <span id="cb6-2"><a href="#cb6-2"></a><span class="im">from</span> jax.lax <span class="im">import</span> batch_matmul</span>
@@ -242,7 +242,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <div class="sourceCode" id="cb11"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1"></a><span class="kw">def</span> message_passing(A, F):</span>
 <span id="cb11-2"><a href="#cb11-2"></a>    <span class="cf">return</span> batch_matmul(A, F)</span></code></pre></div>
 <p>Visually, this is represented as follows:</p>
-<p><img src="./figures/figure-message-passing-batched.png" /></p>
+<p><img src="figures/figure-message-passing-batched.png" /></p>
 <p>To this author’s best knowledge, this should be the most efficient implementation of batched message passing across multiple graphs that also supports automatic differentiation, while also maintaining parity with the written equation form, hence preserving readability. The problems associated with a for-loop, sparse matrix multiplication, and dictionary carries, are removed. Moreover, the sample/batch dimension is preserved, hence it is semantically easy to map each graph to its corresponding output value. Given the current state of automatic differentiation libraries, no additional machinery is necessary to support sparse matrix products.</p>
 <p>The only disadvantage that this author can think of is that zero-padding may not be intuitive at first glance, and that the data must still be specially prepared and stacked first.</p>
 <h2 id="concluding-words">Concluding Words</h2>
